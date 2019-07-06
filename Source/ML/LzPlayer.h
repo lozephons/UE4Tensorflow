@@ -9,6 +9,22 @@
 class USceneCaptureComponent2D;
 class UTextureRenderTarget2D;
 class UCameraComponent;
+class UTensorFlowComponent;
+
+UENUM()
+enum class ELzDirection
+{
+	None,
+	Left,
+	Right,
+	Forward,
+	Back,
+	ForwardLeft,
+	ForwardRight,
+	BackLeft,
+	BackRight,
+	Max
+};
 
 UCLASS()
 class ML_API ALzPlayer : public ACharacter
@@ -32,7 +48,11 @@ public:
 
 	void OnInputForward(float Value);
 	void OnInputRight(float Value);
-	void OnInputOne();
+	void OnInputOne(float Delta);
+	void SaveCapture();
+	void OnInputT();
+	
+	void OnChangeDirection();
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	USceneCaptureComponent2D*	SceneCapture;
@@ -43,4 +63,13 @@ public:
 	UCameraComponent*			CameraComponent;
 
 	TArray<FColor> OutBMP;
+	TArray<FColor> OutBMP2;
+
+	TArray<uint8> CompressedBitmap;
+
+	UTensorFlowComponent* TensorFlowComponent;
+
+	ELzDirection	Direction;
+
+	FVector			DirVecList[(int)ELzDirection::Max];
 };
