@@ -22,11 +22,11 @@ void ATensorFlowActor::BeginPlay()
 	
 	//FUnrealEnginePythonModule::AddPythonDependentPlugin(TEXT("tensorflow"));
 
-	TensorFlowComponent->PythonModule = TEXT("TestModule");
-	TensorFlowComponent->PythonClass = TEXT("TestClass");
-	TensorFlowComponent->InitializePythonComponent();
+	//TensorFlowComponent->PythonModule = TEXT("TestModule");
+	//TensorFlowComponent->PythonClass = TEXT("TestClass");
+	//TensorFlowComponent->InitializePythonComponent();
 
-	TensorFlowComponent->CallPythonComponentMethodString(TEXT("test"), TEXT(""));
+	//TensorFlowComponent->CallPythonComponentMethodString(TEXT("test"), TEXT(""));
 }
 
 // Called every frame

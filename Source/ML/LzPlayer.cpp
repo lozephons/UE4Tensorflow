@@ -9,6 +9,7 @@
 #include "ImageUtils.h"
 #include "FileHelper.h"
 #include "TensorFlowComponent.h"
+#include "LzUtil.h"
 
 // Sets default values
 ALzPlayer::ALzPlayer()
@@ -44,6 +45,9 @@ void ALzPlayer::BeginPlay()
 	RenderTarget->InitAutoFormat(1280, 720);
 	RenderTarget->bGPUSharedFlag = true;
 
+	StateWidth = RenderTarget->GetSurfaceWidth() / 20;
+	StateHeight = RenderTarget->GetSurfaceHeight() / 20;
+
 	OutBMP.AddUninitialized(RenderTarget->GetSurfaceWidth() * RenderTarget->GetSurfaceHeight());
 	for (FColor& color : OutBMP)
 	{
@@ -56,6 +60,17 @@ void ALzPlayer::BeginPlay()
 	TensorFlowComponent->PythonModule = TEXT("TestModule");
 	TensorFlowComponent->PythonClass = TEXT("Main");
 	TensorFlowComponent->InitializePythonComponent();
+
+	Destination = FVector(10000, 0, lastLoc.Z);
+
+	TensorFlowComponent->CallPythonComponentMethodMLSetup(TEXT("Setup"), StateHeight * StateWidth * 3 + 5, (int)ELzDirection::Max, 100);
+	OnInputOne(0.0f);
+	TensorFlowComponent->CallPythonComponentMethodMLRunBegin(TEXT("RunBegin"), OutBMP2, 0, GetActorLocation(), (Destination - GetActorLocation()).Size2D());
+
+	lastLoc = GetActorLocation();
+
+	//int ActionIdx = TensorFlowComponent->CallPythonComponentMethodInt(TEXT("GetNextAction"), TEXT(""));
+	//LzUtil::LOG(5.f, this, TEXT("Action : %d"), ActionIdx);
 }
 
 // Called every frame
@@ -64,8 +79,56 @@ void ALzPlayer::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	OnInputOne(DeltaTime);
 
-	FRotator ControlRotation = GetControlRotation();
-	AddMovementInput(DirVecList[(int)Direction].RotateAngleAxis(ControlRotation.Yaw, FVector(0, 0, 1)), 1);
+	if (bEnd == false)
+	{
+		FVector CurLoc = GetActorLocation();
+
+		int ActionIdx = TensorFlowComponent->CallPythonComponentMethodMLGetNextAction(TEXT("GetNextAction"), bTraining);
+		Direction = static_cast<ELzDirection>(ActionIdx);
+
+		float LocDiff = (CurLoc - lastLoc).Size2D();
+
+		float lastDistToDest = (Destination - lastLoc).Size2D();
+		float distToDestination = (Destination - CurLoc).Size2D();
+		float reward = (lastDistToDest - distToDestination) * 100 - distToDestination;
+		/*
+		
+		if (distToDestination < 100)
+			reward += 1000.f;
+		else if (distToDestination < 1000)
+			reward += 100.f;
+		else if (distToDestination > 10000)
+			reward -= 1000.f;
+
+		*/
+
+		int done = distToDestination < 10.f ? 1 : 0;
+
+		LzUtil::LOG(0.5f, this, TEXT("Action : %d, Reward : %f, Dist : %f"), ActionIdx, reward, distToDestination);
+
+		if (TensorFlowComponent->CallPythonComponentMethodMLRun(TEXT("Run"), distToDestination, OutBMP2, (int)Direction, CurLoc, reward, done))
+		{
+			bEnd = true;
+			Direction = ELzDirection::None;
+			return;
+		}
+
+		FRotator ControlRotation = GetControlRotation();
+		AddMovementInput(DirVecList[(int)Direction].RotateAngleAxis(ControlRotation.Yaw, FVector(0, 0, 1)), 1);
+
+		lastLoc = CurLoc;
+	}
+	else
+	{
+		nInst++;
+		if (nInst < 100)
+		{
+			OnDoNextGame();
+			return;
+		}
+	}
+
+	LzUtil::LOG(0.0f, this, TEXT("Location : %s"), *GetActorLocation().ToString());
 }
 
 // Called to bind functionality to input
@@ -80,6 +143,8 @@ void ALzPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 
 	PlayerInputComponent->BindAction("Test", IE_Pressed, this, &ALzPlayer::SaveCapture);
 	PlayerInputComponent->BindKey(EKeys::T, IE_Pressed, this, &ALzPlayer::OnInputT);
+
+	PlayerInputComponent->BindKey(EKeys::Q, IE_Pressed, this, &ALzPlayer::OnDoNextGame);
 
 	PlayerInputComponent->BindKey(EKeys::R, IE_Pressed, this, &ALzPlayer::OnChangeDirection);
 }
@@ -121,11 +186,7 @@ void ALzPlayer::OnInputOne(float Delta)
 		color.A = 255;
 	}
 
-	float NewWidth = RenderTarget->GetSurfaceWidth() / 10;
-	float NewHeight = RenderTarget->GetSurfaceHeight() / 10;
-	FImageUtils::CropAndScaleImage(RenderTarget->GetSurfaceWidth(), RenderTarget->GetSurfaceHeight(), NewWidth, NewHeight, OutBMP, OutBMP2);
-
-	TensorFlowComponent->CallPythonComponentMethodML(TEXT("test"), OutBMP2);
+	FImageUtils::CropAndScaleImage(RenderTarget->GetSurfaceWidth(), RenderTarget->GetSurfaceHeight(), StateWidth, StateHeight, OutBMP, OutBMP2);
 }
 
 void ALzPlayer::SaveCapture()
@@ -147,5 +208,18 @@ void ALzPlayer::SaveCapture()
 
 void ALzPlayer::OnInputT()
 {
-	TensorFlowComponent->CallPythonComponentMethodInt(TEXT("test"), TEXT(""));
+	SetActorLocation(FVector(0, 0, GetActorLocation().Z));
+
+	bTraining = false;
+	bEnd = false;
+}
+
+void ALzPlayer::OnDoNextGame()
+{
+	SetActorLocation(FVector(0, 0, GetActorLocation().Z));
+	OnInputOne(0.0f);
+	TensorFlowComponent->CallPythonComponentMethodMLRunBegin(TEXT("RunBegin"), OutBMP2, 0, GetActorLocation(), (Destination - GetActorLocation()).Size2D());
+
+	bTraining = true;
+	bEnd = false;
 }

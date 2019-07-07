@@ -51,6 +51,8 @@ public:
 	void OnInputOne(float Delta);
 	void SaveCapture();
 	void OnInputT();
+
+	void OnDoNextGame();
 	
 	void OnChangeDirection();
 
@@ -72,4 +74,16 @@ public:
 	ELzDirection	Direction;
 
 	FVector			DirVecList[(int)ELzDirection::Max];
+
+	float			StateWidth;
+	float			StateHeight;
+
+	bool			bEnd = false;
+	bool			bTraining = true;
+
+	FVector			lastLoc;
+
+	FVector			Destination;
+
+	int				nInst = 0;
 };
