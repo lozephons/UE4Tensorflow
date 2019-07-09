@@ -34,6 +34,8 @@ ALzPlayer::ALzPlayer()
 	DirVecList[idx++] = FVector(-1, 1, 0);
 	DirVecList[idx++] = FVector(1, -1, 0);
 	DirVecList[idx++] = FVector(-1, -1, 0);
+
+	
 }
 
 // Called when the game starts or when spawned
@@ -61,7 +63,7 @@ void ALzPlayer::BeginPlay()
 	TensorFlowComponent->PythonClass = TEXT("Main");
 	TensorFlowComponent->InitializePythonComponent();
 
-	Destination = FVector(10000, 0, lastLoc.Z);
+	Destination = FVector(-10, 48260, lastLoc.Z);
 
 	TensorFlowComponent->CallPythonComponentMethodMLSetup(TEXT("Setup"), StateHeight * StateWidth * 3 + 5, (int)ELzDirection::Max, 100);
 	OnInputOne(0.0f);
@@ -69,8 +71,26 @@ void ALzPlayer::BeginPlay()
 
 	lastLoc = GetActorLocation();
 
-	//int ActionIdx = TensorFlowComponent->CallPythonComponentMethodInt(TEXT("GetNextAction"), TEXT(""));
-	//LzUtil::LOG(5.f, this, TEXT("Action : %d"), ActionIdx);
+	SpawnWalls();
+}
+
+void ALzPlayer::SpawnWalls()
+{
+	for (AActor* CurWall : Walls)
+	{
+		CurWall->Destroy(true);
+	}
+	Walls.Empty();
+
+	auto WallClass = LoadObject<UClass>(nullptr, TEXT("Blueprint'/Game/Blueprints/Wall.Wall_C'"));
+	for (int i = 0; i < 60; i++)
+	{
+		int XRand = FMath::Rand() % 4000;
+		AActor* Wall = GetWorld()->SpawnActor<AActor>(WallClass, FVector(0, -48320, 112) + FVector(XRand - 2000, (i + 1) * 1500, -100), FRotator::ZeroRotator);
+		int ScaleRand = FMath::Rand() % 5;
+		Wall->SetActorScale3D(FVector(10 + ScaleRand, 1, 3));
+		Walls.Add(Wall);
+	}
 }
 
 // Called every frame
@@ -79,32 +99,49 @@ void ALzPlayer::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 	OnInputOne(DeltaTime);
 
+	float TimeElapsedThreshold = 60 * 5;
+	if (nInst < 100)
+		TimeElapsedThreshold = 60 * 2;
+	else if(nInst < 200)
+		TimeElapsedThreshold = 60 * 5;
+	else if(nInst < 300)
+		TimeElapsedThreshold = 60 * 10;
+	else if(nInst < 500)
+		TimeElapsedThreshold = 60 * 15;
+
+	if (bEnd || TimeElapsed > TimeElapsedThreshold || SamePositionTime > 10.f)
+	{
+		nInst++;
+		SamePositionTime = 0;
+		TimeElapsed = 0.0f;
+		//if (nInst < 100)
+		{
+			OnDoNextGame();
+			return;
+		}
+	}
+
 	if (bEnd == false)
 	{
+		TimeElapsed += DeltaTime;
 		FVector CurLoc = GetActorLocation();
 
 		int ActionIdx = TensorFlowComponent->CallPythonComponentMethodMLGetNextAction(TEXT("GetNextAction"), bTraining);
 		Direction = static_cast<ELzDirection>(ActionIdx);
 
 		float LocDiff = (CurLoc - lastLoc).Size2D();
+		if (LocDiff < KINDA_SMALL_NUMBER)
+			SamePositionTime += DeltaTime;
+		else
+			SamePositionTime = 0;
 
 		float lastDistToDest = (Destination - lastLoc).Size2D();
 		float distToDestination = (Destination - CurLoc).Size2D();
 		float reward = (lastDistToDest - distToDestination) * 100 - distToDestination;
-		/*
-		
-		if (distToDestination < 100)
-			reward += 1000.f;
-		else if (distToDestination < 1000)
-			reward += 100.f;
-		else if (distToDestination > 10000)
-			reward -= 1000.f;
-
-		*/
 
 		int done = distToDestination < 10.f ? 1 : 0;
 
-		LzUtil::LOG(0.5f, this, TEXT("Action : %d, Reward : %f, Dist : %f"), ActionIdx, reward, distToDestination);
+		LzUtil::LOG(0.3f, this, TEXT("Action : %d, Reward : %f, Dist : %f"), ActionIdx, reward, distToDestination);
 
 		if (TensorFlowComponent->CallPythonComponentMethodMLRun(TEXT("Run"), distToDestination, OutBMP2, (int)Direction, CurLoc, reward, done))
 		{
@@ -118,17 +155,8 @@ void ALzPlayer::Tick(float DeltaTime)
 
 		lastLoc = CurLoc;
 	}
-	else
-	{
-		nInst++;
-		if (nInst < 100)
-		{
-			OnDoNextGame();
-			return;
-		}
-	}
 
-	LzUtil::LOG(0.0f, this, TEXT("Location : %s"), *GetActorLocation().ToString());
+	LzUtil::LOG(0.0f, this, TEXT("CurTrainingNum : %d, Location : %s, TimeElapsed : %f, SamePosTime : %f"), nInst + 1, *GetActorLocation().ToString(), TimeElapsed, SamePositionTime);
 }
 
 // Called to bind functionality to input
@@ -208,7 +236,8 @@ void ALzPlayer::SaveCapture()
 
 void ALzPlayer::OnInputT()
 {
-	SetActorLocation(FVector(0, 0, GetActorLocation().Z));
+	SetActorLocation(FVector(0, -48320, GetActorLocation().Z));
+	//SpawnWalls();
 
 	bTraining = false;
 	bEnd = false;
@@ -216,7 +245,9 @@ void ALzPlayer::OnInputT()
 
 void ALzPlayer::OnDoNextGame()
 {
-	SetActorLocation(FVector(0, 0, GetActorLocation().Z));
+	SetActorLocation(StartPos);
+	SpawnWalls();
+
 	OnInputOne(0.0f);
 	TensorFlowComponent->CallPythonComponentMethodMLRunBegin(TEXT("RunBegin"), OutBMP2, 0, GetActorLocation(), (Destination - GetActorLocation()).Size2D());
 

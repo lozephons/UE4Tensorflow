@@ -36,8 +36,8 @@ class Model():
 		self._states = tf.compat.v1.placeholder(shape=[None, self._num_states], dtype=tf.float32)
 		self._q_s_a = tf.compat.v1.placeholder(shape=[None, self._num_actions], dtype=tf.float32)
 		
-		fc1 = tf.compat.v1.keras.layers.Dense(100, activation = tf.nn.relu)(self._states)
-		fc2 = tf.compat.v1.keras.layers.Dense(100, activation = tf.nn.relu)(fc1)
+		fc1 = tf.compat.v1.keras.layers.Dense(50, activation = tf.nn.relu)(self._states)
+		fc2 = tf.compat.v1.keras.layers.Dense(50, activation = tf.nn.relu)(fc1)
 		#fc3 = tf.compat.v1.keras.layers.Dense(100, activation = tf.nn.relu)(fc2)
 		self._logits = tf.compat.v1.keras.layers.Dense(self._num_actions)(fc2)
 		loss = tf.compat.v1.losses.mean_squared_error(self._q_s_a, self._logits)

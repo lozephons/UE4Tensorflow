@@ -86,4 +86,13 @@ public:
 	FVector			Destination;
 
 	int				nInst = 0;
+
+	TArray<AActor*>	Walls;
+
+	void			SpawnWalls();
+
+	float			TimeElapsed = 0.0f;
+	float			SamePositionTime = 0.0f;
+
+	FVector			StartPos = FVector(0, -48320, 112);
 };
